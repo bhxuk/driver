@@ -34,11 +34,19 @@ jobs:
         run: GODOT="$PWD/godot" tools/build.sh
 
       - name: Publish release
-        if: startsWith(github.ref, 'refs/tags/')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          cp build/windows/Driver.exe "build/Driver-portable.exe"
-          gh release create "${GITHUB_REF_NAME}" build/Driver-Setup.exe build/Driver-portable.exe \
-            --title "Driver ${GITHUB_REF_NAME}" --generate-notes || \
-          gh release upload "${GITHUB_REF_NAME}" build/Driver-Setup.exe build/Driver-portable.exe --clobber
+          # Tag pushes use the tag; "Run workflow" uses the version in project.godot.
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            TAG="${GITHUB_REF_NAME}"
+          else
+            TAG="v$(grep -oP 'config/version="\K[^"]+' project.godot)"
+          fi
+          cp build/windows/Driver.exe build/Driver-portable.exe
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" build/Driver-Setup.exe build/Driver-portable.exe --clobber
+          else
+            gh release create "$TAG" build/Driver-Setup.exe build/Driver-portable.exe \
+              --target "${GITHUB_SHA}" --title "Driver $TAG" --notes-file .github/release-notes.md
+          fi
